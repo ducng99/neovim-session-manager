@@ -23,24 +23,33 @@ function session_manager.load_session(discard_current)
   end)
 end
 
+function session_manager.load_dir_session(dir_path, discard_current)
+  local session = config.dir_to_session_filename(dir_path)
+  if session:exists() then
+    utils.load_session(session.filename, discard_current)
+    return true
+  end
+  return false
+end
+
 --- Loads saved used session.
 ---@param discard_current boolean?: If `true`, do not check for unsaved buffers.
 function session_manager.load_last_session(discard_current)
   local last_session = utils.get_last_session_filename()
   if last_session then
     utils.load_session(last_session, discard_current)
+    return true
   end
+  return false
 end
 
 --- Loads a session for the current working directory.
 function session_manager.load_current_dir_session(discard_current)
   local cwd = vim.loop.cwd()
   if cwd then
-    local session = config.dir_to_session_filename(cwd)
-    if session:exists() then
-      utils.load_session(session.filename, discard_current)
-    end
+    return session_manager.load_dir_session(cwd, discard_current)
   end
+  return false
 end
 
 --- Saves a session for the current working directory.
@@ -53,11 +62,19 @@ end
 
 --- Loads a session based on settings. Executed after starting the editor.
 function session_manager.autoload_session()
-  if config.autoload_mode ~= AutoloadMode.Disabled and vim.fn.argc() == 0 and not vim.g.started_with_stdin then
-    if config.autoload_mode == AutoloadMode.CurrentDir then
-      session_manager.load_current_dir_session()
-    elseif config.autoload_mode == AutoloadMode.LastSession then
-      session_manager.load_last_session()
+  if config.autoload_mode ~= AutoloadMode.Disabled and not vim.g.started_with_stdin then
+    if vim.fn.argc() == 0 then
+      if config.autoload_mode == AutoloadMode.CurrentDir then
+        session_manager.load_current_dir_session()
+      elseif config.autoload_mode == AutoloadMode.LastSession then
+        session_manager.load_last_session()
+      elseif config.autoload_mode == AutoloadMode.CurrentDirOrLastSession then
+        if not session_manager.load_current_dir_session() then
+          session_manager.load_last_session()
+        end
+      end
+    else
+      session_manager.load_dir_session(Path:new(vim.fn.argv()[1]):absolute())
     end
   end
 end
