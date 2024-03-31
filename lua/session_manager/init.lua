@@ -1,12 +1,29 @@
 local config = require('session_manager.config')
 local AutoloadMode = require('session_manager.config').AutoloadMode
 local utils = require('session_manager.utils')
-local Path = require('plenary.path')
 local session_manager = {}
 
 --- Apply user settings.
 ---@param values table
 function session_manager.setup(values) setmetatable(config, { __index = vim.tbl_extend('force', config.defaults, values) }) end
+
+-- Displays action selection menu for :SessionManager
+function session_manager.available_commands()
+  local commands = {}
+  for cmd, _ in pairs(session_manager) do
+    if cmd ~= 'setup' and cmd ~= 'available_commands' and cmd ~= 'autosave_session' then
+      table.insert(commands, cmd)
+    end
+  end
+  vim.ui.select(commands, {
+    prompt = 'Session Manager',
+    format_item = function(item) return item:sub(1, 1):upper() .. item:sub(2):gsub('_', ' ') end,
+  }, function(item)
+    if item then
+      session_manager[item]()
+    end
+  end)
+end
 
 --- Selects a session a loads it.
 ---@param discard_current boolean: If `true`, do not check for unsaved buffers.
@@ -86,14 +103,21 @@ function session_manager.delete_session()
     format_item = function(item) return utils.shorten_path(item.dir) end,
   }, function(item)
     if item then
-      Path:new(item.filename):rm()
-      local cwd = vim.loop.cwd()
-      if utils.is_session and cwd and item.filename == config.dir_to_session_filename(cwd).filename then
-        utils.is_session = false
-      end
+      utils.delete_session(item.filename)
       session_manager.delete_session()
     end
   end)
+end
+
+--- Deletes the session for the current working directory.
+function session_manager.delete_current_dir_session()
+  local cwd = vim.loop.cwd()
+  if cwd then
+    local session = config.dir_to_session_filename(cwd)
+    if session:exists() then
+      utils.delete_session(session)
+    end
+  end
 end
 
 --- Saves a session based on settings. Executed before exiting the editor.
